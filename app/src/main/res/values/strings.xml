@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Journey planner</string>
+    <string name="autoCompleteHint">Cél</string>
+    <string name="action_info">Info</string>
+    <string name="title_activity_main2">Main2Activity</string>
+
+    <!-- Strings related to Settings -->
+
+    <!-- Example General settings -->
+
+    <!-- Example settings for Data & Sync -->
+
+    <!-- Example settings for Notifications -->
+
+    <!-- TODO: Remove or change this placeholder text -->
+</resources>
