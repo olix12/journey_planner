@@ -2,83 +2,33 @@ package com.example.megyeri_oliver.journeyplanner;
 
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
-
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 
 /*
 To-do: Investigation needed: _id, etc.
  */
 
 public class DatabaseOpenHelper extends SQLiteOpenHelper {
-    private static final String DATABASE_NAME = "timetable5.db";
-    private static final String DATABASE_NAME2 = "databases/timetable5.db";
-    private static final int DATABASE_VERSION = 14; //not used?
-    private static final String DATABASE_PATH = "/data/data/com.example.megyeri_oliver.journeyplanner/databases/";
+    private static final String DATABASE_NAME = "timetable.db";
+    private static final int DATABASE_VERSION = 15; //not used?
+//    private static final String DATABASE_PATH = "/data/data/com.example.megyeri_oliver.journeyplanner/databases/";
 
     private final Context context;
-    private SQLiteDatabase database;
 
     public DatabaseOpenHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
         this.context = context;
     }
 
-    public void createDatabase() throws IOException {
-        this.getReadableDatabase();
-
-        InputStream input = context.getAssets().open(DATABASE_NAME2);
-        String outputFileName = DATABASE_PATH + DATABASE_NAME;
-        OutputStream output = new FileOutputStream(outputFileName);
-
-        byte[] buffer = new byte[1024];
-        int length;
-        while ((length = input.read(buffer)) > 0) {
-            output.write(buffer, 0, length);
-        }
-
-        output.flush();
-        output.close();
-        input.close();
-    }
-
-    public SQLiteDatabase openDatabase() {
-        if(!isDatabaseExist()) {
-            try {
-                this.createDatabase();
-            } catch (Exception e) {
-                System.err.println("Error creating database.");
-            }
-        }
-        try {
-            this.database = SQLiteDatabase.openDatabase(DATABASE_PATH+DATABASE_NAME, null, SQLiteDatabase.OPEN_READONLY);
-        }
-        catch(Exception e) {
-            System.out.print("Error opening database.");
-        }
-        return this.database;
-    }
-
-    private boolean isDatabaseExist() {
-        SQLiteDatabase db;
-
-        try {
-            db = SQLiteDatabase.openDatabase(DATABASE_PATH + DATABASE_NAME, null, SQLiteDatabase.OPEN_READONLY);
-        }
-        catch (SQLiteException e) {
-            return false;
-        }
-
-        db.close();
-        return true;
-    }
-
     @Override
-    public void onCreate(SQLiteDatabase db) {}
+    public void onCreate(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE `calendar` ( `service_id` TEXT, `monday` INTEGER, `tuesday` INTEGER, `wednesday` INTEGER, `thursday` INTEGER, `friday` INTEGER, `saturday` INTEGER, `sunday` INTEGER, `start_date` TEXT, `end_date` TEXT, PRIMARY KEY(`service_id`) )");
+        db.execSQL("CREATE TABLE `routes` ( `route_id` INTEGER, `agency_id` INTEGER, `route_short_name` TEXT, `route_long_name` TEXT, `route_desc` TEXT, `route_type` INTEGER, `route_url` TEXT, `route_color` TEXT, `route_text_color` TEXT, PRIMARY KEY(`route_id`) )");
+        db.execSQL("CREATE TABLE `stop_times` ( `trip_id` TEXT, `arrival_time` TEXT, `departure_time` TEXT, `stop_id` INTEGER, `stop_sequence` INTEGER, `pickup_type` INTEGER, `drop_off_type` INTEGER, `shape_dist_traveled` INTEGER, PRIMARY KEY(`trip_id`,`stop_sequence`) )");
+        db.execSQL("CREATE TABLE \"stops\" ( `stop_id` INTEGER, `stop_name` TEXT, `stop_lat` REAL, `stop_lon` REAL, PRIMARY KEY(`stop_id`) )");
+        db.execSQL("CREATE TABLE `trips` ( `route_id` INTEGER, `service_id` TEXT, `trip_id` TEXT, `trip_headsign` TEXT, `direction_id` INTEGER, `shape_id` INTEGER, `wheelchair_accessible` INTEGER, PRIMARY KEY(`trip_id`) )");
+        db.execSQL("CREATE TABLE `version` ( `version` TEXT, PRIMARY KEY(`version`) )");
+    }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {}

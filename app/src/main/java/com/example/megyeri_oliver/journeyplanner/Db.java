@@ -3,34 +3,50 @@ package com.example.megyeri_oliver.journeyplanner;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteOpenHelper;
+import android.database.sqlite.SQLiteStatement;
 
+import net.maritimecloud.internal.core.javax.json.Json;
+import net.maritimecloud.internal.core.javax.json.JsonArray;
+import net.maritimecloud.internal.core.javax.json.JsonObject;
+import net.maritimecloud.internal.core.javax.json.JsonReader;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+
+import java.io.BufferedInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.URL;
+import java.sql.SQLException;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Locale;
-import java.text.SimpleDateFormat;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public class Db {
 	private static DatabaseOpenHelper openHelper;
 	private static SQLiteDatabase database;
-	private static Db instance;
+    private static String version;
+    private static String latestVersion;
 
 	public static void init(Context context) {
 		openHelper = new DatabaseOpenHelper(context);
+
 		try {
-			openHelper.createDatabase();
+			database = openHelper.getReadableDatabase();
 		}
 		catch (Exception e) {
 			System.err.println(e);
 		};
-		try {
-			database = openHelper.openDatabase();
-		}
-		catch (Exception e) {};
-		//database = openHelper.getReadableDatabase();
 	}
 
 	public static List<String> test() {
@@ -120,6 +136,251 @@ public class Db {
 		return result;
 	}
 
+    public static String getVersion() {
+        return version;
+    }
+
+    public static boolean isDatabaseUpToDate() {
+        version = "x";  //if version table is empty (application is running for the first time)
+
+        Cursor resultSet = database.rawQuery("SELECT version FROM version", null);
+        if( resultSet.moveToFirst() ) {
+            version = resultSet.getString(0);
+        }
+
+        try {
+            URL url = new URL("https://api.transitfeeds.com/v1/getFeedVersions?key=ee5f58ac-25ae-465a-b39d-9e7bb8cc662f&feed=dakk%2F625&page=1&limit=10&err=1&warn=1");
+            InputStream inputStream = url.openStream();
+            JsonReader jsonReader = Json.createReader(inputStream);
+
+            JsonObject obj = jsonReader.readObject();
+            obj = obj.getJsonObject("results");
+            JsonArray array = obj.getJsonArray("versions");
+            obj = array.getValuesAs(JsonObject.class).get(0);
+            latestVersion = obj.getString("id");
+        }
+        catch(Exception e) {
+            System.err.println(e);
+        }
+
+        return version.equals(latestVersion) ? true : false;
+    }
+
+    public static void update(Context context) {
+        final String ZIP_FILE_NAME = "db.zip";
+
+        try {
+            byte[] buffer = new byte[1024];
+            int length;
+
+            URL url = new URL("https://transitfeeds.com/p/dakk/625/latest/download");
+
+            InputStream inputStream = new BufferedInputStream( url.openStream() );
+            OutputStream outputStream = context.openFileOutput(ZIP_FILE_NAME, Context.MODE_PRIVATE);
+
+            while ((length = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, length);
+            }
+
+            inputStream.close();
+            outputStream.close();
+
+            ZipInputStream zis = new ZipInputStream(context.openFileInput(ZIP_FILE_NAME));
+
+            for (ZipEntry ze = zis.getNextEntry(); ze != null; ze = zis.getNextEntry()) {
+                FileOutputStream fos = context.openFileOutput(ze.getName(), Context.MODE_PRIVATE);
+
+                while ((length = zis.read(buffer)) > 0) {
+                    fos.write(buffer, 0, length);
+                }
+
+                fos.close();
+            }
+
+            zis.closeEntry();
+            zis.close();
+        } catch (Exception e) {
+            System.err.println(e);
+        }
+
+        try {
+            database.close();
+            database = openHelper.getWritableDatabase();
+
+            Db.updateStopTimesTable(context);
+            Db.updateCalendarTable(context);
+            Db.updateRoutesTable(context);
+            Db.updateStopsTable(context);
+            Db.updateTripsTable(context);
+
+            String sql = "DELETE FROM version";
+            database.execSQL(sql);
+            sql = "INSERT INTO version VALUES (\"" + latestVersion + "\")";
+            database.execSQL(sql);
+
+            Db.version = latestVersion;
+
+            database.close();
+            database = openHelper.getReadableDatabase();
+        } catch (Exception e) {
+            System.err.println(e);
+        }
+    }
+
+    private static void updateStopTimesTable(Context context) throws SQLException, IOException {
+        database.execSQL("DELETE FROM stop_times");
+
+        String sql = "INSERT INTO stop_times VALUES (?,?,?,?,?,?,?,?)";
+
+		CSVParser csvParser = new CSVParser( new InputStreamReader(context.openFileInput("stop_times.txt")),
+				CSVFormat.RFC4180.
+				withHeader() );
+
+        database.beginTransaction();
+
+        SQLiteStatement pstmt = database.compileStatement(sql);
+
+		for(CSVRecord csvRecord: csvParser) {
+            pstmt.bindString(1, csvRecord.get(0));
+            pstmt.bindString(2, csvRecord.get(1));
+            pstmt.bindString(3, csvRecord.get(2));
+            pstmt.bindLong(4, Long.parseLong(csvRecord.get(3)));
+            pstmt.bindLong(5, Long.parseLong(csvRecord.get(4)));
+            pstmt.bindLong(6, Long.parseLong(csvRecord.get(5)));
+            pstmt.bindLong(7, Long.parseLong(csvRecord.get(6)));
+            pstmt.bindLong(8, Long.parseLong(csvRecord.get(7)));
+
+            pstmt.execute();
+            pstmt.clearBindings();
+		}
+        csvParser.close();
+
+        database.setTransactionSuccessful();
+        database.endTransaction();
+    }
+
+    private static void updateCalendarTable(Context context) throws SQLException, IOException {
+        database.execSQL("DELETE FROM calendar");
+
+        String sql = "INSERT INTO calendar VALUES (?,?,?,?,?,?,?,?,?,?)";
+
+        CSVParser csvParser = new CSVParser( new InputStreamReader(context.openFileInput("calendar.txt")),
+                CSVFormat.RFC4180.
+                        withHeader() );
+
+        database.beginTransaction();
+
+        SQLiteStatement pstmt = database.compileStatement(sql);
+
+        for(CSVRecord csvRecord: csvParser) {
+            String startDate = csvRecord.get(8).substring(0,4) + "-" + csvRecord.get(8).substring(4,6) + "-" + csvRecord.get(8).substring(6,8);
+            String endDate = csvRecord.get(9).substring(0,4) + "-" + csvRecord.get(9).substring(4,6) + "-" + csvRecord.get(9).substring(6,8);
+
+            pstmt.bindString(1, csvRecord.get(0));
+            pstmt.bindLong(2, Long.parseLong(csvRecord.get(1)));
+            pstmt.bindLong(3, Long.parseLong(csvRecord.get(2)));
+            pstmt.bindLong(4, Long.parseLong(csvRecord.get(3)));
+            pstmt.bindLong(5, Long.parseLong(csvRecord.get(4)));
+            pstmt.bindLong(6, Long.parseLong(csvRecord.get(5)));
+            pstmt.bindLong(7, Long.parseLong(csvRecord.get(6)));
+            pstmt.bindLong(8, Long.parseLong(csvRecord.get(7)));
+            pstmt.bindString(9, startDate);
+            pstmt.bindString(10, endDate);
+
+            pstmt.execute();
+            pstmt.clearBindings();
+        }
+        csvParser.close();
+
+        database.setTransactionSuccessful();
+        database.endTransaction();
+	}
+
+	private static void updateRoutesTable(Context context) throws SQLException, IOException {
+		database.execSQL("DELETE FROM routes");
+
+		String sql = "INSERT INTO routes VALUES (?,?,?,?,?,?,?,?,?)";
+
+        CSVParser csvParser = new CSVParser( new InputStreamReader(context.openFileInput("routes.txt")),
+                CSVFormat.RFC4180.
+                        withHeader() );
+
+		database.beginTransaction();
+
+		SQLiteStatement pstmt = database.compileStatement(sql);
+        for(CSVRecord csvRecord: csvParser) {
+			pstmt.bindLong(1, Long.parseLong(csvRecord.get(0)));
+			pstmt.bindLong(2, Long.parseLong(csvRecord.get(1)));
+			pstmt.bindString(3, csvRecord.get(2));
+			pstmt.bindString(4, csvRecord.get(3));
+			pstmt.bindString(5, csvRecord.get(4));
+			pstmt.bindLong(6, Long.parseLong(csvRecord.get(5)));
+			pstmt.bindString(7, csvRecord.get(6));
+			pstmt.bindString(8, csvRecord.get(7));
+			pstmt.bindString(9, csvRecord.get(8));
+
+			pstmt.execute();
+			pstmt.clearBindings();
+		}
+
+		database.setTransactionSuccessful();
+		database.endTransaction();
+	}
+
+	private static void updateStopsTable(Context context) throws SQLException, IOException {
+        database.execSQL("DELETE FROM stops");
+
+        String sql = "INSERT INTO stops VALUES (?,?,?,?)";
+
+        CSVParser csvParser = new CSVParser( new InputStreamReader(context.openFileInput("stops.txt")),
+                CSVFormat.RFC4180.
+                        withHeader() );
+
+        database.beginTransaction();
+
+        SQLiteStatement pstmt = database.compileStatement(sql);
+        for(CSVRecord csvRecord: csvParser) {
+            pstmt.bindLong(1, Long.parseLong(csvRecord.get(0)));
+            pstmt.bindString(2, csvRecord.get(1));
+            pstmt.bindDouble(3, Double.parseDouble(csvRecord.get(2)));
+            pstmt.bindDouble(4, Double.parseDouble(csvRecord.get(3)));
+
+            pstmt.execute();
+            pstmt.clearBindings();
+        }
+
+        database.setTransactionSuccessful();
+        database.endTransaction();
+	}
+
+	private static void updateTripsTable(Context context) throws SQLException, IOException {
+        database.execSQL("DELETE FROM trips");
+
+        String sql = "INSERT INTO trips VALUES (?,?,?,?,?,?,?)";
+
+        CSVParser csvParser = new CSVParser( new InputStreamReader(context.openFileInput("trips.txt")),
+                CSVFormat.RFC4180.
+                        withHeader() );
+
+        database.beginTransaction();
+
+        SQLiteStatement pstmt = database.compileStatement(sql);
+        for(CSVRecord csvRecord: csvParser) {
+            pstmt.bindLong(1, Long.parseLong(csvRecord.get(0)));
+            pstmt.bindString(2, csvRecord.get(1));
+            pstmt.bindString(3, csvRecord.get(2));
+            pstmt.bindString(4, csvRecord.get(3));
+            pstmt.bindLong(5, Long.parseLong(csvRecord.get(4)));
+            pstmt.bindLong(6, Long.parseLong(csvRecord.get(5)));
+            pstmt.bindLong(7, Long.parseLong(csvRecord.get(6)));
+
+            pstmt.execute();
+            pstmt.clearBindings();
+        }
+
+        database.setTransactionSuccessful();
+        database.endTransaction();
+	}
 
 	private static ArrayList<Stop> getStopsFromResultSet(Cursor rs, Stop s) throws ParseException{
 		ArrayList<Stop> result = new ArrayList<Stop>();

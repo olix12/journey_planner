@@ -29,7 +29,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_weight="1.00"
-            android:text="Journey planner\nVersion 0.12\nOlivér Megyeri"
+            android:text="Journey planner\nVerzió: 0.13\nMegyeri Olivér"
             android:textAlignment="center" />
 
     </LinearLayout>

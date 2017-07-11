@@ -76,8 +76,6 @@ public class MainActivity
                     .addApi(LocationServices.API)
                     .build();
 
-        Db.init(this);
-
         this.mDate = Calendar.getInstance();
 
         this.mTimePickerDialog = new TimePickerDialog(this, new TimePickerDialog.OnTimeSetListener() {
