@@ -52,14 +52,7 @@ public class Path implements Serializable{
 		return routeType;
 	}
 
-	public int compareTo(Path b) {
-		return this.arrivalTime.compareTo(b.arrivalTime);
-	}
-
 	public String toString() {
 		return this.serviceName + " ";
 	}
-
-
-
 }

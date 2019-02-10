@@ -13,7 +13,6 @@ public class Stop implements Comparable<Stop>, Serializable {
 	private final static double WALK_SPEED = 1.4; //m/s
 
 	public final static double SZEGED[] = {46.252649, 20.153506};
-
 	private final static double NE_SZEGED[] = {46.294712, 20.229383};
 	private final static double SE_SZEGED[] = {46.191621, 20.220031};
 	private final static double SW_SZEGED[] = {46.189542, 19.995670};
@@ -35,8 +34,6 @@ public class Stop implements Comparable<Stop>, Serializable {
 	private int sumWalkTime;
 	private int stopCount;
 
-	private static int objectCount = 0;
-
 	public Stop(long ID, String name, double latitude, double longitude) {
 		this.ID = ID;
 		this.name = name;
@@ -48,8 +45,6 @@ public class Stop implements Comparable<Stop>, Serializable {
 
 		this.sumWalkTime = 0;
 		this.stopCount = 0;
-
-		objectCount++;
 	}
 
 	public Stop(long ID, String name, double latitude, double longitude, Path path) {
@@ -76,8 +71,6 @@ public class Stop implements Comparable<Stop>, Serializable {
 
 		this.sumWalkTime = path.getDepartureStop().getSumWalkTime();
 		this.stopCount = path.getDepartureStop().getStopCount() + 1;
-
-		objectCount++;
 	}
 
 	public long getID() {
@@ -116,13 +109,6 @@ public class Stop implements Comparable<Stop>, Serializable {
 		return first;
 	}
 
-	public void setFirst(Stop first) { this.first = first; }
-
-	public boolean isFirst() {
-		if(this == this.first) return true;
-		else return false;
-	}
-
 	public Stop getDestination() {
 		return destination;
 	}
@@ -144,10 +130,6 @@ public class Stop implements Comparable<Stop>, Serializable {
 		return stopCount;
 	}
 
-	public int getSequence() {
-		return sequence;
-	}
-
 	public void setSequence(int sequence) {
 		this.sequence = sequence;
 	}
@@ -160,8 +142,6 @@ public class Stop implements Comparable<Stop>, Serializable {
 		if(tempArray != null) {
 			result.addAll(tempArray);
 		}
-
-		tempArray = null;
 
 		if(this.path == null) {
 			tempArray = getNearbyStops(ENDPOINT_RADIUS);
