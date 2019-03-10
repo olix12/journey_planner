@@ -84,7 +84,7 @@ public class Db {
 	}
 
 	public static ArrayList<Stop> getNexts(Stop s) {
-		Cursor resultSet = null;
+		Cursor resultSet;
 		ArrayList<Stop> result = null;
 
 		long stopID = s.getID();
@@ -97,14 +97,15 @@ public class Db {
 
 		String query =
 				"SELECT 	stop_times.stop_id, stops.stop_name, stops.stop_lat, stops.stop_lon, " +
-						"			routes.route_short_name, sub_stop_times.departure_time, stop_times.arrival_time, trips.direction_id, stop_times.stop_sequence, routes.route_type " +
-						"FROM 		stops, " +
+						"			routes.route_short_name, sub_stop_times.departure_time, stop_times.arrival_time, " +
+            "     trips.direction_id, stop_times.stop_sequence, routes.route_type, stop_times.trip_id " +
+						"FROM stops, " +
 						"			stop_times, " +
 						"			trips, " +
 						"			routes, " +
 						"			( SELECT trip_id, stop_sequence, departure_time FROM stop_times WHERE stop_id = " + stopID + ") AS sub_stop_times, " +
-						"           ( SELECT service_id FROM calendar WHERE '" + date + "' >= date(start_date) AND '" + date + "' <= date(end_date) AND " + dayName + " = 1 ) AS sub_calendar " +
-						"WHERE 		time(stop_times.departure_time) >= '" + time + "' " +
+						"     ( SELECT service_id FROM calendar WHERE '" + date + "' >= date(start_date) AND '" + date + "' <= date(end_date) AND " + dayName + " = 1 ) AS sub_calendar " +
+						"WHERE 	time(stop_times.departure_time) >= '" + time + "' " +
 						"AND		stop_times.stop_sequence = sub_stop_times.stop_sequence + 1 " +
 						"AND		stop_times.trip_id = trips.trip_id " +
 						"AND		trips.route_id = routes.route_id " +
@@ -124,8 +125,89 @@ public class Db {
 		return result;
 	}
 
+	public static boolean isTripHasDestination(Stop startStop) {
+		Cursor resultSet;
+		ArrayList<Long> result = new ArrayList<>();
+
+		Calendar arrivalDate = startStop.getDate();
+		String tripId = startStop.getPath().getTripId();
+
+		if( ! tripId.isEmpty() ) {
+      String time = new SimpleDateFormat("HH:mm::ss").format(arrivalDate.getTime());
+
+      String query = "SELECT stop_id FROM stop_times WHERE trip_id = '" + tripId + "' AND time(arrival_time) > '" + time + "'";
+
+      resultSet = database.rawQuery(query, null);
+      if (resultSet.moveToFirst()) {
+        do {
+          long stopId = resultSet.getLong(0);
+          result.add(stopId);
+        } while (resultSet.moveToNext());
+      }
+
+      for(Long r: result) {
+        for(Stop s: startStop.getDestinationStops()) {
+          if(s.getID() == r) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+	}
+
+	public static Stop goThroughTrip(Stop startStop) throws ParseException {
+		Cursor resultSet;
+
+		Calendar arrivalDate = startStop.getDate();
+		String tripId = startStop.getPath().getTripId();
+
+		if( ! tripId.isEmpty() ) {
+			String time = new SimpleDateFormat("HH:mm::ss").format(arrivalDate.getTime());
+
+			String query = "SELECT stops.stop_id, stop_name, stops.stop_lat, stops.stop_lon, " +
+                      "stop_times.arrival_time, stop_times.stop_sequence " +
+                      "FROM stop_times, stops " +
+                      "WHERE trip_id='" + tripId + "' AND time(arrival_time) > '" + time + "' " +
+                      "AND stops.stop_id = stop_times.stop_id " +
+                      "ORDER BY stop_times.stop_sequence";
+
+			resultSet = database.rawQuery(query, null);
+      if (resultSet.moveToFirst()) {
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
+        Stop prevStop = startStop;
+
+        do {
+          Calendar arrivalTime = new GregorianCalendar();
+
+					long stopId = resultSet.getLong(0);
+					String stopName = resultSet.getString(1);
+					double stopLat = resultSet.getDouble(2);
+					double stopLon = resultSet.getDouble(3);
+          arrivalTime.setTime(timeFormat.parse(resultSet.getString(4)));
+          int stopSequence = resultSet.getInt(5);
+
+          Path path = new Path(startStop.getPath().getServiceName(), prevStop.getPath().getArrivalTime(),
+                                arrivalTime, prevStop, startStop.getPath().getRouteType(), tripId);
+          path.setDirectionId(startStop.getPath().getDirectionId());
+          Stop r = new Stop(stopId, stopName, stopLat, stopLon, path);
+          r.setSequence(stopSequence);
+
+          for(Stop ds: startStop.getDestinationStops()) {
+            if(ds.getID() == r.getID()) {
+              return r;
+            }
+          }
+				} while (resultSet.moveToNext());
+			}
+		}
+
+		return null;
+	}
+
 	public static ArrayList<Stop> getAllStops() {
-		Cursor resultSet = null;
+		Cursor resultSet;
 		ArrayList<Stop> result = null;
 
 		String query = "SELECT * FROM stops";
@@ -403,6 +485,7 @@ public class Db {
 				int directionId = rs.getInt(7);
 				int stopSequence = rs.getInt(8);
 				int routeType = rs.getInt(9);
+				String tripId = rs.getString(10);
 
 				departureTime.set(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DATE));
 				arrivalTime.set(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DATE));
@@ -427,7 +510,7 @@ public class Db {
 				}
 
 				if (ok) {
-					Path path = new Path(serviceName, departureTime, arrivalTime, s, routeType);
+					Path path = new Path(serviceName, departureTime, arrivalTime, s, routeType, tripId);
 					path.setDirectionId(directionId);
 					Stop r = new Stop(stopID, stopName, stopLat, stopLon, path);
 					r.setSequence(stopSequence);

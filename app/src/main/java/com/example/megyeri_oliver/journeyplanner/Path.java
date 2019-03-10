@@ -19,13 +19,16 @@ public class Path implements Serializable{
 	private int directionId;
 	private int routeType;
 
-	public Path(String serviceName, Calendar departureTime, Calendar arrivalTime, Stop departureStop, int routeType) {
+	private String tripId;  //performance improving attempt 1
+
+	public Path(String serviceName, Calendar departureTime, Calendar arrivalTime, Stop departureStop, int routeType, String tripId) {
 		this.serviceName = serviceName;
 		this.departureTime = departureTime;
 		this.arrivalTime = arrivalTime;
 		this.departureStop = departureStop;
 		this.directionId = 0;
 		this.routeType = routeType;
+		this.tripId = tripId;
 	}
 
 	public String getServiceName() {
@@ -51,6 +54,8 @@ public class Path implements Serializable{
 	public int getRouteType() {
 		return routeType;
 	}
+
+	public String getTripId() { return this.tripId; }
 
 	public String toString() {
 		return this.serviceName + " ";

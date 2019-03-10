@@ -1,6 +1,9 @@
 package com.example.megyeri_oliver.journeyplanner;
 
+import android.util.Log;
+
 import java.io.Serializable;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Calendar;
 
@@ -34,6 +37,8 @@ public class Stop implements Comparable<Stop>, Serializable {
 	private int sumWalkTime;
 	private int stopCount;
 
+	private boolean isFastForwardPossible;
+
 	public Stop(long ID, String name, double latitude, double longitude) {
 		this.ID = ID;
 		this.name = name;
@@ -42,9 +47,12 @@ public class Stop implements Comparable<Stop>, Serializable {
 		this.change = 0;
 		this.date = Calendar.getInstance();
 		this.first = this;
+		this.destinationStops = new ArrayList<>();
 
 		this.sumWalkTime = 0;
 		this.stopCount = 0;
+
+		this.isFastForwardPossible = false;
 	}
 
 	public Stop(long ID, String name, double latitude, double longitude, Path path) {
@@ -59,10 +67,18 @@ public class Stop implements Comparable<Stop>, Serializable {
 		this.destination = path.getDepartureStop().getFirst().getDestination();
 		this.destinationStops = path.getDepartureStop().getDestinationStops();
 
+		this.isFastForwardPossible = false;
+
 		this.change = 0;
 		if( path.getDepartureStop().getPath() != null ) {
 			if( !path.getDepartureStop().getPath().getServiceName().equals(this.path.getServiceName()) ) {
 				this.change = path.getDepartureStop().getChange() + 1;
+
+				if(Db.isTripHasDestination(this)) {
+					Log.i("Journey Planner","Destination found!");
+					isFastForwardPossible = true;
+					fastForward();
+				}
 			}
 			else {
 				this.change = path.getDepartureStop().getChange();
@@ -134,6 +150,20 @@ public class Stop implements Comparable<Stop>, Serializable {
 		this.sequence = sequence;
 	}
 
+	public boolean isFastForwardPossible() { return isFastForwardPossible; }
+
+	public Stop fastForward() {
+	  System.out.println("Fast forwarding!");
+	  Stop result = null;
+	  try {
+      result = Db.goThroughTrip(this);
+    }
+    catch(ParseException e) {
+	    System.err.println("Parse error: something really went wrong.");
+    }
+    return result;
+  }
+
 	public ArrayList<Stop> getNexts() {
 		ArrayList<Stop> result = new ArrayList<Stop>();
 		ArrayList<Stop> tempArray;
@@ -187,7 +217,8 @@ public class Stop implements Comparable<Stop>, Serializable {
 
 				arrivalDate.set(Calendar.MINUTE, date.get(Calendar.MINUTE) + walkTime);
 
-				Path path = new Path(Path.WALK_SERVICE_NAME, (Calendar)this.date.clone(), arrivalDate, this, Path.ROUTE_TYPE_WALK);
+				Path path = new Path(Path.WALK_SERVICE_NAME, (Calendar)this.date.clone(), arrivalDate,
+                this, Path.ROUTE_TYPE_WALK, "");
 				Stop nearbyStop = new Stop(s.getID(), s.getName(), s.getLatitude(), s.getLongitude(), path);
 				nearbyStop.setSumWalkTime(this.sumWalkTime + walkTime);	//logolás
 

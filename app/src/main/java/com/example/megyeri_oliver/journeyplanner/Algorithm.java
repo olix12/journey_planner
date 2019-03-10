@@ -6,15 +6,17 @@ import java.util.PriorityQueue;
 
 public class Algorithm {
 	final static int CHANGE = 3;
+	final static boolean IS_FAST_FORWARD_ON = true;
 
 	public static Stop algorithm(Stop origin) {
-		PriorityQueue<Stop> routes = new PriorityQueue<Stop>();
-		HashMap<Long, Stop> recordings = new HashMap<Long, Stop>();
+		PriorityQueue<Stop> routes = new PriorityQueue<>();
+		HashMap<Long, Stop> recordings = new HashMap<>();
 
 		routes.add(origin);
 		ArrayList<Stop> destinations = origin.getDestinationStops();
 
-		ArrayList<Stop> destinationTrips = new ArrayList<Stop>();
+		//it's maybe dead code, consider deleting...
+		ArrayList<Stop> destinationTrips = new ArrayList<>();
 		for(Stop s: destinations) {
 			for(Stop sNext: s.getNexts()) {
 				boolean ok = true;
@@ -31,14 +33,19 @@ public class Algorithm {
 			}
 		}
 
-		int elseCount = 0;
 		while( atDestination(recordings, destinations) == null ) {
 			Stop head = routes.poll();
 
 			//System.out.println(head.toString());
 
-			for(Stop nextStop: head.getNexts()) {
+      if(head.isFastForwardPossible()) {
+        System.out.println("Fast forwarding point!");
+        if(IS_FAST_FORWARD_ON) {
+          return head.fastForward();
+        }
+      }
 
+			for(Stop nextStop: head.getNexts()) {
 			    /*if( ! head.isFirst() ) {
                     for(Stop s : destinationTrips) {
                         if( head.getPath().getServiceName().equals(s.getPath().getServiceName())
@@ -55,13 +62,12 @@ public class Algorithm {
 						routes.add(nextStop);
 					}
 					else if( recordings.get( nextStop.getID() ).getChange() >= nextStop.getChange()
-							|| recordings.get( nextStop.getID() ).getSumWalkTime() > nextStop.getSumWalkTime()
-							|| recordings.get( nextStop.getID() ).getStopCount() > nextStop.getStopCount() ) {
+										|| recordings.get( nextStop.getID() ).getSumWalkTime() > nextStop.getSumWalkTime()
+										|| recordings.get( nextStop.getID() ).getStopCount() > nextStop.getStopCount() ) {
 						routes.remove( recordings.get(nextStop.getID()) );
 						recordings.remove(nextStop.getID());
 						recordings.put(nextStop.getID(), nextStop);
 						routes.add(nextStop);
-						elseCount++;
 					}
 				}
 			}
